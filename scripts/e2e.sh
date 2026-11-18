@@ -6,7 +6,7 @@ set -euo pipefail
 bin=${1:-}
 if [ -z "$bin" ]; then
   bin=$(mktemp -d)/smallca
-  go build -o "$bin" ./cmd/smallca
+  go build -buildvcs=false -o "$bin" ./cmd/smallca
 fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
