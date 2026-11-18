@@ -6,6 +6,11 @@ All notable changes to smallca are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `smallca version` reports the module version and commit for binaries built with
+  `go install` or `go build`, instead of `dev` and `none`.
+
 ## [0.1.0] - 2026-11-18
 
 First public release.

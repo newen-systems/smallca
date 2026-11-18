@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"time"
@@ -21,6 +22,23 @@ var (
 	Version = "dev"
 	Commit  = "none"
 )
+
+// buildVersion fills in a version and commit that -ldflags left unset, as with
+// go install, from the module version and VCS revision Go records in the binary.
+func buildVersion(info *debug.BuildInfo, version, commit string) (string, string) {
+	if info == nil {
+		return version, commit
+	}
+	if version == "dev" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		version = strings.TrimPrefix(info.Main.Version, "v")
+	}
+	for _, s := range info.Settings {
+		if s.Key == "vcs.revision" && commit == "none" && len(s.Value) >= 7 {
+			commit = s.Value[:7]
+		}
+	}
+	return version, commit
+}
 
 // SchemaVersion is the version of every JSON object smallca prints.
 const SchemaVersion = 1
@@ -87,7 +105,9 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		writeMainHelp(stdout)
 		return ExitOK
 	case "version", "--version":
-		return writeJSON(e, map[string]string{"version": Version, "commit": Commit})
+		info, _ := debug.ReadBuildInfo()
+		v, c := buildVersion(info, Version, Commit)
+		return writeJSON(e, map[string]string{"version": v, "commit": c})
 	}
 	var c *command
 	rest := args[1:]

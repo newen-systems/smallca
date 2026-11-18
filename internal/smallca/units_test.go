@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -322,5 +323,25 @@ func wantPrivate(t *testing.T, path string) {
 	}
 	if st.Mode().Perm() != 0o600 {
 		t.Fatalf("%s: want mode 0600, got %v", path, st.Mode().Perm())
+	}
+}
+
+func TestBuildVersion(t *testing.T) {
+	installed := &debug.BuildInfo{Main: debug.Module{Version: "v0.1.0"}}
+	local := &debug.BuildInfo{Main: debug.Module{Version: "(devel)"},
+		Settings: []debug.BuildSetting{{Key: "vcs.revision", Value: "9a1614b2e32394263ed318d8d0f3d409544bbcf"}}}
+	for _, c := range []struct {
+		info                *debug.BuildInfo
+		version, commit     string
+		wantVer, wantCommit string
+	}{
+		{installed, "dev", "none", "0.1.0", "none"},
+		{local, "dev", "none", "dev", "9a1614b"},
+		{installed, "0.2.0", "abc1234", "0.2.0", "abc1234"}, // -ldflags wins
+		{nil, "dev", "none", "dev", "none"},
+	} {
+		if v, cm := buildVersion(c.info, c.version, c.commit); v != c.wantVer || cm != c.wantCommit {
+			t.Errorf("buildVersion(%v, %q, %q) = %q, %q", c.info, c.version, c.commit, v, cm)
+		}
 	}
 }
