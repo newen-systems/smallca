@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -133,14 +134,12 @@ func TestWriteIfChanged(t *testing.T) {
 	if w, err := writeIfChanged(p, []byte("a"), 0o600); err != nil || w {
 		t.Fatalf("same content rewritten %v %v", w, err)
 	}
-	if st, _ := os.Stat(p); st.Mode().Perm() != 0o600 {
-		t.Fatalf("mode %v", st.Mode().Perm())
-	}
+	wantPrivate(t, p)
 	ro := filepath.Join(t.TempDir(), "ro")
 	if err := os.Mkdir(ro, 0o500); err != nil {
 		t.Fatal(err)
 	}
-	if os.Getuid() != 0 { // root ignores directory permissions
+	if os.Getuid() > 0 { // root ignores directory modes, and Windows (-1) has none
 		if _, err := writeIfChanged(filepath.Join(ro, "f"), []byte("a"), 0o600); err == nil {
 			t.Fatal("write into a read-only directory succeeded")
 		}
@@ -307,5 +306,21 @@ func TestIsSignerFor(t *testing.T) {
 	other, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if !isSignerFor(k, k) || isSignerFor(other, k) || isSignerFor("not a key", k) {
 		t.Fatal("isSignerFor")
+	}
+}
+
+// wantPrivate fails unless path is readable by its owner only. Windows has no
+// Unix modes, so the check is skipped there.
+func wantPrivate(t *testing.T, path string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		return
+	}
+	st, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Mode().Perm() != 0o600 {
+		t.Fatalf("%s: want mode 0600, got %v", path, st.Mode().Perm())
 	}
 }

@@ -65,9 +65,7 @@ func TestConvertP12RoundTrip(t *testing.T) {
 		}
 	}
 	same(out("o.crt"), crt)
-	if st, _ := os.Stat(out("o.key")); st.Mode().Perm() != 0o600 {
-		t.Fatalf("key mode %v", st.Mode().Perm())
-	}
+	wantPrivate(t, out("o.key"))
 	if m := mustRun(t, "", "certificate", "match", "--cert", out("o.crt"), "--key", out("o.key")); m["match"] != true {
 		t.Fatalf("extracted key %v", m)
 	}
