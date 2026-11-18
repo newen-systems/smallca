@@ -6,6 +6,8 @@ All notable changes to smallca are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-18
+
 ### Fixed
 
 - `smallca version` reports the module version and commit for binaries built with
@@ -48,5 +50,6 @@ First public release.
   a PKCS#12 file or a Java trust store.
 - Man-page style `--help` for every command; `docs/reference/cli.md` is generated from it.
 
-[Unreleased]: https://github.com/newen-systems/smallca/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/newen-systems/smallca/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/newen-systems/smallca/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/newen-systems/smallca/releases/tag/v0.1.0
