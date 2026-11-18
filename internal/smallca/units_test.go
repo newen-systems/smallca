@@ -139,7 +139,7 @@ func TestWriteIfChanged(t *testing.T) {
 	if err := os.Mkdir(ro, 0o500); err != nil {
 		t.Fatal(err)
 	}
-	if os.Getuid() != 0 { // root ignores directory permissions
+	if os.Getuid() > 0 { // root ignores directory modes, and Windows (-1) has none
 		if _, err := writeIfChanged(filepath.Join(ro, "f"), []byte("a"), 0o600); err == nil {
 			t.Fatal("write into a read-only directory succeeded")
 		}
