@@ -1,0 +1,12 @@
+plugins/modules/root.py validate-modules:missing-gplv3-license # Apache-2.0 collection
+plugins/modules/intermediate_sign.py validate-modules:missing-gplv3-license # Apache-2.0 collection
+plugins/modules/intermediate.py validate-modules:missing-gplv3-license # Apache-2.0 collection
+plugins/modules/leaf.py validate-modules:missing-gplv3-license # Apache-2.0 collection
+plugins/modules/leaf_sign.py validate-modules:missing-gplv3-license # Apache-2.0 collection
+plugins/modules/csr.py validate-modules:missing-gplv3-license # Apache-2.0 collection
+plugins/modules/bundle.py validate-modules:missing-gplv3-license # Apache-2.0 collection
+plugins/modules/convert.py validate-modules:missing-gplv3-license # Apache-2.0 collection
+plugins/modules/certificate_info.py validate-modules:missing-gplv3-license # Apache-2.0 collection
+plugins/modules/verify.py validate-modules:missing-gplv3-license # Apache-2.0 collection
+plugins/modules/match.py validate-modules:missing-gplv3-license # Apache-2.0 collection
+plugins/modules/mtls_verify.py validate-modules:missing-gplv3-license # Apache-2.0 collection

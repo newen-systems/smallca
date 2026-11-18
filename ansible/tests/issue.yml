@@ -1,0 +1,86 @@
+- name: Root
+  newen_systems.smallca.root:
+    root_dir: "{{ w }}/root"
+    subject: CN=Integration Root,O=Example
+    password: "{{ root_password }}"
+  register: r_root
+
+- name: Intermediate, root key passed as content
+  newen_systems.smallca.intermediate:
+    root_cert: "{{ w }}/root/root.crt"
+    root_key_content: "{{ lookup('ansible.builtin.file', w + '/root/root.key') }}"
+    password: "{{ root_password }}"
+    subject: CN=Integration Issuing CA
+    cert_out: "{{ w }}/issuing.crt"
+    key_out: "{{ w }}/issuing.key"
+    permitted_dns: [example.test]
+    k8s_secret_out: "{{ w }}/issuing-secret.yaml"
+    k8s_secret_name: integration-ca
+  register: r_int
+
+- name: Server leaf
+  newen_systems.smallca.leaf:
+    issuer_cert: "{{ w }}/issuing.crt"
+    issuer_key: "{{ w }}/issuing.key"
+    subject: api.example.test
+    san: [192.0.2.50]
+    cert_out: "{{ w }}/api.crt"
+    key_out: "{{ w }}/api.key"
+    fullchain_out: "{{ w }}/api-fullchain.pem"
+  register: r_leaf
+
+- name: Client leaf
+  newen_systems.smallca.leaf:
+    issuer_cert: "{{ w }}/issuing.crt"
+    issuer_key: "{{ w }}/issuing.key"
+    subject: CN=agent
+    san: [agent.example.test]
+    purpose: client
+    cert_out: "{{ w }}/agent.crt"
+    key_out: "{{ w }}/agent.key"
+    fullchain_out: "{{ w }}/agent-fullchain.pem"
+  register: r_client
+
+- name: CSR
+  newen_systems.smallca.csr:
+    subject: app.example.test
+    key_out: "{{ w }}/app.key"
+    csr_out: "{{ w }}/app.csr"
+  register: r_csr
+
+- name: Sign the CSR
+  newen_systems.smallca.leaf_sign:
+    issuer_cert: "{{ w }}/issuing.crt"
+    issuer_key: "{{ w }}/issuing.key"
+    csr: "{{ w }}/app.csr"
+    cert_out: "{{ w }}/app.crt"
+  register: r_sign
+
+- name: Bundle
+  newen_systems.smallca.bundle:
+    certs: ["{{ w }}/root/root.crt", "{{ w }}/app.crt", "{{ w }}/issuing.crt"]
+    fullchain_out: "{{ w }}/app-fullchain.pem"
+  register: r_bundle
+
+- name: PKCS#12
+  newen_systems.smallca.convert:
+    inputs: ["{{ w }}/api.crt", "{{ w }}/api.key", "{{ w }}/issuing.crt"]
+    p12_out: "{{ w }}/api.pfx"
+    password: integration-pfx-password
+  register: r_p12
+
+- name: Split the PKCS#12 back into PEM files
+  newen_systems.smallca.convert:
+    inputs: ["{{ w }}/api.pfx"]
+    cert_out: "{{ w }}/api-from-p12.crt"
+    key_out: "{{ w }}/api-from-p12.key"
+    chain_out: "{{ w }}/api-from-p12-chain.der"
+    password: integration-pfx-password
+  register: r_convert
+
+- name: Changed on the first pass, unchanged on the second
+  ansible.builtin.assert:
+    that: >-
+      [r_root, r_int, r_leaf, r_client, r_csr, r_sign, r_bundle, r_p12, r_convert]
+      | map(attribute='changed') | unique == [pass == 1]
+    fail_msg: "pass {{ pass }}: {{ [r_root, r_int, r_leaf, r_client, r_csr, r_sign, r_bundle, r_p12, r_convert] | map(attribute='changed') }}"

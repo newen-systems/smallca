@@ -1,0 +1,880 @@
+# Spec table for the generated Ansible modules in ansible/plugins/modules/.
+# Each option's `flag` is the smallca flag it maps to; `kind` is how it is
+# passed (str, int, bool or list; the default follows the type). Options
+# without a flag are handled in code: the root location, passwords and the
+# fail_on_* switches. Edit this file, then run:
+#   python3 scripts/gen-ansible-modules.py
+return_descriptions:
+  valid:
+    type: bool
+    description: Whether every check passed.
+  checks:
+    type: list
+    description: Each check with ok and detail.
+  match:
+    type: bool
+    description: Whether the public keys are the same.
+  mismatch:
+    type: str
+    description: Which inputs differ.
+  public_keys:
+    type: dict
+    description: SHA-256 fingerprint of each input's public key.
+  certificates:
+    type: list
+    description: One entry per certificate, in file order.
+  csr:
+    type: dict
+    description: The CSR, when the input is a CSR.
+  error:
+    type: str
+    description: Why the check failed.
+  days_left:
+    type: int
+    description: Whole days until expiry.
+  chain:
+    type: raw
+    description: Chain output path, or the verified chain subjects.
+  ends_at_root:
+    type: bool
+    description: Whether the chain ends at a self-signed root.
+  dns_names:
+    type: list
+    description: DNS SANs of the certificate.
+  ip_addresses:
+    type: list
+    description: IP SANs of the certificate.
+  has_key:
+    type: bool
+    description: Whether the input held a private key.
+modules:
+- name: root
+  cmd:
+  - root
+  - create
+  short: Create a root CA, or check the existing one
+  desc:
+  - Creates C(root.crt) and C(root.key) in O(root_dir), the key encrypted with O(password).
+  - An existing root is decrypted and checked, never overwritten; a different O(subject) is an error.
+  opts:
+    root_dir:
+      type: path
+      required: true
+      description: Directory for C(root.crt) and C(root.key), created mode 0700.
+      flag: --root-dir
+    subject:
+      type: str
+      required: true
+      description: Root subject DN, for example V(CN=Example Root CA,O=Example).
+      flag: --subject
+    password:
+      type: str
+      required: true
+      no_log: true
+      description: Password that encrypts the root key. Sent through a pipe, never on the command line.
+    kty:
+      type: str
+      choices: &id006
+      - EC
+      - RSA
+      description: Key type for a new key. smallca's default is EC.
+      flag: --kty
+    crv:
+      type: str
+      choices: &id007
+      - P-256
+      - P-384
+      description: EC curve for a new key.
+      flag: --crv
+    size:
+      type: int
+      choices: &id008
+      - 2048
+      - 3072
+      - 4096
+      description: RSA key size for a new key. Default 3072.
+      flag: --size
+    not_after:
+      type: str
+      description: Validity as a duration (V(90d), V(10y), V(36h)) or an RFC 3339 time. Capped at the
+        issuer's expiry. smallca's default is V(20y).
+      flag: --not-after
+    path_len:
+      type: int
+      description: Path length constraint. smallca's default is 2.
+      flag: --path-len
+  password: password
+  example: |
+    - name: Create the lab root once
+      newen_systems.smallca.root:
+        root_dir: /srv/pki/root
+        subject: CN=Example Root CA,O=Example
+        password: "{{ lookup('community.hashi_vault.hashi_vault', 'secret=secret/data/pki/root:password') }}"
+      delegate_to: localhost
+      run_once: true
+  ret:
+  - root_cert
+  - root_key
+  - subject
+  - serial
+  - fingerprint_sha256
+  - not_after
+- name: intermediate_sign
+  cmd:
+  - intermediate
+  - sign
+  short: Sign a subordinate-CA CSR generated elsewhere, such as FreeIPA's
+  desc:
+  - Signs a subordinate-CA CSR with the root. The subject is copied byte for byte; the CA profile comes
+    from the options, never from the CSR.
+  - An existing O(cert_out) for the same CSR key, subject and profile, outside its renewal window, is
+    kept.
+  opts:
+    root_dir: &id001
+      type: path
+      description: Directory from M(newen_systems.smallca.root) holding C(root.crt) and C(root.key). Use
+        this or O(root_cert) with O(root_key) or O(root_key_content).
+    root_cert: &id002
+      type: path
+      description: Root certificate file, when the root does not live in O(root_dir).
+    root_key: &id003
+      type: path
+      description: Root private key file, when the root does not live in O(root_dir).
+    root_key_content: &id004
+      type: str
+      no_log: true
+      description: Root private key PEM, for example from a secret manager lookup. Sent to smallca on
+        stdin; never written to disk.
+    password: &id005
+      type: str
+      no_log: true
+      description: Password of an encrypted root key. Sent through a pipe, never on the command line.
+        Omit it for a root key stored in clear.
+    csr:
+      type: path
+      required: true
+      description: CSR file (PEM or DER).
+      flag: --csr
+    cert_out:
+      type: path
+      description: Signed CA certificate output.
+      flag: --cert-out
+      required: true
+    chain_out:
+      type: path
+      description: Issuer chain output (the root).
+      flag: --chain-out
+    fullchain_out:
+      type: path
+      description: Certificate then root.
+      flag: --fullchain-out
+    not_after:
+      type: str
+      description: Validity as a duration (V(90d), V(10y), V(36h)) or an RFC 3339 time. Capped at the
+        issuer's expiry. smallca's default is V(10y).
+      flag: --not-after
+    path_len:
+      type: int
+      description: Path length constraint. smallca's default is 0.
+      flag: --path-len
+    permitted_dns: &id009
+      type: list
+      elements: str
+      description: Permitted DNS domain name constraints.
+      flag: --permitted-dns
+      kind: list
+  root: true
+  example: |
+    - name: Sign the FreeIPA CA CSR
+      newen_systems.smallca.intermediate_sign:
+        root_dir: /srv/pki/root
+        password: "{{ root_password }}"
+        csr: /srv/pki/ipa/ipa.csr
+        cert_out: /srv/pki/ipa/ipa.crt
+        chain_out: /srv/pki/ipa/ipa-chain.pem
+      delegate_to: localhost
+  ret:
+  - cert
+  - chain
+  - fullchain
+  - subject
+  - serial
+  - fingerprint_sha256
+  - root_fingerprint_sha256
+  - not_after
+- name: intermediate
+  cmd:
+  - intermediate
+  - create
+  short: Create an intermediate CA key and root-signed certificate
+  desc:
+  - Generates an intermediate key (unencrypted, mode 0600) and a root-signed CA certificate, optionally
+    as a kubernetes.io/tls Secret manifest for a cert-manager CA Issuer.
+  - An existing pair is kept when it matches the request; a mismatching one is an error, never silently
+    replaced.
+  opts:
+    root_dir: *id001
+    root_cert: *id002
+    root_key: *id003
+    root_key_content: *id004
+    password: *id005
+    subject:
+      type: str
+      required: true
+      description: Intermediate subject DN.
+      flag: --subject
+    cert_out:
+      type: path
+      description: Certificate output.
+      flag: --cert-out
+      required: true
+    key_out:
+      type: path
+      description: Unencrypted key output, mode 0600.
+      flag: --key-out
+      required: true
+    chain_out:
+      type: path
+      description: Issuer chain output (the root).
+      flag: --chain-out
+    fullchain_out:
+      type: path
+      description: Intermediate then root.
+      flag: --fullchain-out
+    kty:
+      type: str
+      choices: *id006
+      description: Key type for a new key. smallca's default is EC.
+      flag: --kty
+    crv:
+      type: str
+      choices: *id007
+      description: EC curve for a new key.
+      flag: --crv
+    size:
+      type: int
+      choices: *id008
+      description: RSA key size for a new key. Default 3072.
+      flag: --size
+    not_after:
+      type: str
+      description: Validity as a duration (V(90d), V(10y), V(36h)) or an RFC 3339 time. Capped at the
+        issuer's expiry. smallca's default is V(10y).
+      flag: --not-after
+    path_len:
+      type: int
+      description: Path length constraint. smallca's default is 0.
+      flag: --path-len
+    permitted_dns: *id009
+    k8s_secret_out:
+      type: path
+      description: Also write a kubernetes.io/tls Secret manifest here, mode 0600.
+      flag: --k8s-secret-out
+    k8s_secret_name:
+      type: str
+      description: Secret metadata.name, with O(k8s_secret_out).
+      flag: --k8s-secret-name
+    k8s_secret_namespace:
+      type: str
+      no_log: false
+      description: Secret metadata.namespace.
+      flag: --k8s-secret-namespace
+  root: true
+  example: |
+    - name: Issuing CA for cert-manager, limited to example.test
+      newen_systems.smallca.intermediate:
+        root_dir: /srv/pki/root
+        password: "{{ root_password }}"
+        subject: CN=Example Kubernetes Issuing CA
+        cert_out: /srv/pki/k8s/issuing.crt
+        key_out: /srv/pki/k8s/issuing.key
+        permitted_dns: [example.test]
+        k8s_secret_out: /srv/pki/k8s/issuing-secret.yaml
+        k8s_secret_name: example-issuing-ca
+        k8s_secret_namespace: cert-manager
+      delegate_to: localhost
+  ret:
+  - cert
+  - key
+  - chain
+  - fullchain
+  - k8s_secret
+  - subject
+  - serial
+  - fingerprint_sha256
+  - not_after
+- name: leaf
+  cmd:
+  - leaf
+  - create
+  short: Issue a server, client (mTLS) or dual-use certificate
+  desc:
+  - Issues a certificate from an intermediate whose unencrypted key smallca can read. The key at O(key_out)
+    is reused when present.
+  - A subject common name that is a dotted host name is always included as a DNS SAN.
+  - The certificate is re-issued when the request changes or it enters its renewal window (30 days, or
+    the last third of a shorter lifetime).
+  opts:
+    issuer_cert:
+      type: path
+      required: true
+      description: Issuing intermediate certificate.
+      flag: --issuer-cert
+    issuer_key:
+      type: path
+      required: true
+      no_log: false
+      description: Issuing intermediate private key (unencrypted).
+      flag: --issuer-key
+    subject:
+      type: str
+      required: true
+      description: Subject DN, or a bare host name.
+      flag: --subject
+    san: &id011
+      type: list
+      elements: str
+      description: Subject alternative names. Values that parse as IP addresses become IP SANs, the rest
+        DNS SANs.
+      flag: --san
+      kind: list
+    purpose: &id010
+      type: str
+      choices:
+      - server
+      - client
+      - both
+      description: 'Extended key usage: V(server) (serverAuth), V(client) (clientAuth, for mTLS clients)
+        or V(both). smallca''s default is V(server).'
+      flag: --purpose
+    cert_out:
+      type: path
+      description: Certificate output.
+      flag: --cert-out
+      required: true
+    key_out:
+      type: path
+      description: Private key output, mode 0600; reused if present.
+      flag: --key-out
+      required: true
+    chain_out:
+      type: path
+      description: Issuer chain output (the intermediate).
+      flag: --chain-out
+    fullchain_out:
+      type: path
+      description: Certificate then intermediate, what a server presents.
+      flag: --fullchain-out
+    kty:
+      type: str
+      choices: *id006
+      description: Key type for a new key. smallca's default is EC.
+      flag: --kty
+    crv:
+      type: str
+      choices: *id007
+      description: EC curve for a new key.
+      flag: --crv
+    size:
+      type: int
+      choices: *id008
+      description: RSA key size for a new key. Default 3072.
+      flag: --size
+    not_after:
+      type: str
+      description: Validity as a duration (V(90d), V(10y), V(36h)) or an RFC 3339 time. Capped at the
+        issuer's expiry. smallca's default is V(90d).
+      flag: --not-after
+  example: |
+    - name: Server certificate for each web host
+      newen_systems.smallca.leaf:
+        issuer_cert: /srv/pki/issuing.crt
+        issuer_key: /srv/pki/issuing.key
+        subject: "{{ inventory_hostname }}"
+        san: "{{ [ansible_host] + (extra_names | default([])) }}"
+        cert_out: "/srv/pki/hosts/{{ inventory_hostname }}.crt"
+        key_out: "/srv/pki/hosts/{{ inventory_hostname }}.key"
+        fullchain_out: "/srv/pki/hosts/{{ inventory_hostname }}-fullchain.pem"
+      delegate_to: localhost
+
+    - name: mTLS client certificate
+      newen_systems.smallca.leaf:
+        issuer_cert: /srv/pki/issuing.crt
+        issuer_key: /srv/pki/issuing.key
+        subject: CN=backup-agent,O=Example
+        purpose: client
+        san: [backup-agent.example.test]
+        cert_out: /srv/pki/agent.crt
+        key_out: /srv/pki/agent.key
+      delegate_to: localhost
+  ret:
+  - cert
+  - key
+  - chain
+  - fullchain
+  - subject
+  - dns_names
+  - ip_addresses
+  - serial
+  - fingerprint_sha256
+  - not_after
+- name: leaf_sign
+  cmd:
+  - leaf
+  - sign
+  short: Sign a server or client CSR generated elsewhere
+  desc:
+  - Signs a CSR from an appliance or service that keeps its own key. Only the subject and public key come
+    from the CSR; usages are set by O(purpose). SANs come from the CSR unless O(san) replaces them.
+  opts:
+    issuer_cert:
+      type: path
+      required: true
+      description: Issuing intermediate certificate.
+      flag: --issuer-cert
+    issuer_key:
+      type: path
+      required: true
+      no_log: false
+      description: Issuing intermediate private key (unencrypted).
+      flag: --issuer-key
+    csr:
+      type: path
+      required: true
+      description: CSR file (PEM or DER).
+      flag: --csr
+    san:
+      type: list
+      elements: str
+      description: Replace the CSR's SANs with these.
+      flag: --san
+      kind: list
+    purpose: *id010
+    cert_out:
+      type: path
+      description: Certificate output.
+      flag: --cert-out
+      required: true
+    chain_out:
+      type: path
+      description: Issuer chain output (the intermediate).
+      flag: --chain-out
+    fullchain_out:
+      type: path
+      description: Certificate then intermediate.
+      flag: --fullchain-out
+    not_after:
+      type: str
+      description: Validity as a duration (V(90d), V(10y), V(36h)) or an RFC 3339 time. Capped at the
+        issuer's expiry. smallca's default is V(90d).
+      flag: --not-after
+  example: |
+    - name: Sign the switch's CSR
+      newen_systems.smallca.leaf_sign:
+        issuer_cert: /srv/pki/issuing.crt
+        issuer_key: /srv/pki/issuing.key
+        csr: /srv/pki/switch1.csr
+        cert_out: /srv/pki/switch1.crt
+      delegate_to: localhost
+  ret:
+  - cert
+  - chain
+  - fullchain
+  - subject
+  - dns_names
+  - ip_addresses
+  - serial
+  - fingerprint_sha256
+  - not_after
+- name: csr
+  cmd:
+  - csr
+  - create
+  short: Create a key and a CSR for another CA
+  desc:
+  - Writes an unencrypted key (reused when present) and a CSR for it. An existing CSR for the same key,
+    subject and SANs is kept.
+  opts:
+    subject:
+      type: str
+      required: true
+      description: Subject DN, or a bare host name.
+      flag: --subject
+    san: *id011
+    key_out:
+      type: path
+      description: Private key output, mode 0600; reused if present.
+      flag: --key-out
+      required: true
+    csr_out:
+      type: path
+      description: CSR output.
+      flag: --csr-out
+      required: true
+    kty:
+      type: str
+      choices: *id006
+      description: Key type for a new key. smallca's default is EC.
+      flag: --kty
+    crv:
+      type: str
+      choices: *id007
+      description: EC curve for a new key.
+      flag: --crv
+    size:
+      type: int
+      choices: *id008
+      description: RSA key size for a new key. Default 3072.
+      flag: --size
+  example: |
+    - name: Key and CSR for a public CA
+      newen_systems.smallca.csr:
+        subject: www.example.test
+        san: [example.test]
+        key_out: /etc/pki/www.key
+        csr_out: /etc/pki/www.csr
+  ret:
+  - key
+  - csr
+  - subject
+  - dns_names
+  - ip_addresses
+- name: bundle
+  cmd:
+  - certificate
+  - bundle
+  short: Put certificates into one ordered chain
+  desc:
+  - Orders certificates from several files into leaf-first chain order, drops duplicates and, unless O(include_root),
+    the root. Fails on more than one chain.
+  opts:
+    certs:
+      type: list
+      elements: path
+      required: true
+      description: Certificate files, any order.
+      flag: --cert
+      kind: list
+    fullchain_out:
+      type: path
+      description: Ordered chain output.
+      flag: --fullchain-out
+      required: true
+    include_root:
+      type: bool
+      default: false
+      description: Keep the self-signed root at the end.
+      flag: --include-root
+      kind: bool
+  example: |
+    - name: Build the chain a CA sent in pieces
+      newen_systems.smallca.bundle:
+        certs: [server.crt, intermediate2.crt, intermediate1.crt]
+        fullchain_out: server-fullchain.pem
+  ret:
+  - fullchain
+  - chain
+  - ends_at_root
+- name: convert
+  cmd:
+  - certificate
+  - convert
+  short: Convert, split or repackage certificates and keys between PEM, DER, PKCS#7 and PKCS#12
+  desc:
+  - Reads certificates and at most one private key from PEM, DER, PKCS#7 and PKCS#12 files, and writes
+    each output named. Certificate outputs take their format from O(format), or from the file extension
+    (C(.der) and C(.cer) are DER, C(.p7b) and C(.p7c) are PKCS#7, anything else is PEM).
+  - The end certificate is the one the private key matches, or without a key the one certificate that
+    signed none of the others.
+  opts:
+    inputs:
+      type: list
+      elements: path
+      required: true
+      description: Input files in any of the supported forms.
+      flag: --in
+      kind: list
+    format:
+      type: str
+      choices: [pem, der, p7b]
+      description: Format of every certificate output. Default is from each file extension.
+      flag: --format
+    out:
+      type: path
+      description: Every certificate, in input order.
+      flag: --out
+    cert_out:
+      type: path
+      description: The end certificate.
+      flag: --cert-out
+    chain_out:
+      type: path
+      description: The issuers of the end certificate.
+      flag: --chain-out
+    fullchain_out:
+      type: path
+      description: The end certificate, then its issuers.
+      flag: --fullchain-out
+    key_out:
+      type: path
+      description: The private key, unencrypted PKCS#8 (mode 0600).
+      flag: --key-out
+    split_dir:
+      type: path
+      description: Directory for one file per certificate.
+      flag: --split-dir
+    p12_out:
+      type: path
+      description: PKCS#12 output with the key, end certificate and issuers.
+      flag: --p12-out
+    truststore_out:
+      type: path
+      description: PKCS#12 trust store of every certificate, for Java.
+      flag: --truststore-out
+    password:
+      type: str
+      no_log: true
+      description: Password of a PKCS#12 or encrypted key input, and of O(p12_out) or O(truststore_out). Sent
+        through a pipe.
+    legacy:
+      type: bool
+      default: false
+      description: Use 3DES for systems that cannot read AES-256 PKCS#12.
+      flag: --legacy
+      kind: bool
+  password: password
+  required_one_of:
+  - [out, cert_out, chain_out, fullchain_out, key_out, split_dir, p12_out, truststore_out]
+  example: |
+    - name: Split a PFX into PEM files for nginx
+      newen_systems.smallca.convert:
+        inputs: [/srv/pki/web.pfx]
+        cert_out: /etc/nginx/tls/web.crt
+        key_out: /etc/nginx/tls/web.key
+        chain_out: /etc/nginx/tls/chain.pem
+        password: "{{ pfx_password }}"
+  ret:
+  - certificates
+  - has_key
+- name: certificate_info
+  cmd:
+  - certificate
+  - inspect
+  - --json
+  readonly: true
+  short: Read what is in a certificate, chain, CSR or live server
+  desc:
+  - Returns every certificate in O(path) (or the chain a TLS server presents at O(url)), or the CSR, as
+    structured data. Never changes anything.
+  opts:
+    path:
+      type: path
+      description: Certificate, chain or CSR file.
+      flag: --file
+    url:
+      type: str
+      description: 'TLS server to fetch the chain from: host, host:port or https://host:port.'
+      flag: --url
+    servername:
+      type: str
+      description: SNI name to send with O(url).
+      flag: --servername
+  exclusive:
+  - - path
+    - url
+  required_one_of:
+  - - path
+    - url
+  example: |
+    - name: Days left on the web certificate
+      newen_systems.smallca.certificate_info:
+        path: /etc/nginx/tls/fullchain.pem
+      register: cert
+
+    - ansible.builtin.debug:
+        msg: "{{ cert.certificates[0].days_left }} days left"
+  ret:
+  - certificates
+  - csr
+- name: verify
+  cmd:
+  - certificate
+  - verify
+  readonly: true
+  ok_codes:
+  - 0
+  - 3
+  short: Check a certificate chains to a root and is not about to expire
+  desc:
+  - Verifies O(path) (or a live server at O(url)) against O(roots), optionally for O(host), and that it
+    has at least O(min_remaining) left.
+  - Fails the task when the check fails, unless O(fail_on_invalid=false); the result is in RV(valid) either
+    way.
+  opts:
+    path:
+      type: path
+      description: Certificate file; further certificates are intermediates.
+      flag: --cert
+    url:
+      type: str
+      description: Verify the chain a TLS server presents.
+      flag: --url
+    servername:
+      type: str
+      description: SNI name to send with O(url).
+      flag: --servername
+    roots:
+      type: path
+      description: Trusted root certificate(s). Optional with O(min_remaining).
+      flag: --roots
+    chain:
+      type: path
+      description: Intermediate certificates file.
+      flag: --chain
+    host:
+      type: str
+      description: DNS name the certificate must be valid for.
+      flag: --host
+    min_remaining:
+      type: str
+      description: Fail when the certificate expires within this duration, for example V(30d).
+      flag: --min-remaining
+    fail_on_invalid:
+      type: bool
+      default: true
+      description: Fail the task when the check fails.
+  exclusive:
+  - - path
+    - url
+  required_one_of:
+  - - path
+    - url
+  - - roots
+    - min_remaining
+  example: |
+    - name: Fail the deploy if the certificate has under 14 days left
+      newen_systems.smallca.verify:
+        path: /etc/nginx/tls/fullchain.pem
+        roots: /srv/pki/root.crt
+        host: www.example.test
+        min_remaining: 14d
+  ret:
+  - valid
+  - error
+  - subject
+  - days_left
+  - chain
+- name: match
+  cmd:
+  - certificate
+  - match
+  readonly: true
+  ok_codes:
+  - 0
+  - 3
+  short: Check a certificate, key and CSR belong together
+  desc:
+  - Compares the public keys of any two or three of O(cert), O(key) and O(csr). Fails when they differ,
+    unless O(fail_on_mismatch=false).
+  opts:
+    cert:
+      type: path
+      description: Certificate file.
+      flag: --cert
+    key:
+      type: path
+      no_log: false
+      description: Private key file.
+      flag: --key
+    csr:
+      type: path
+      description: CSR file.
+      flag: --csr
+    password:
+      type: str
+      no_log: true
+      description: Password of an encrypted key.
+    fail_on_mismatch:
+      type: bool
+      default: true
+      description: Fail the task when the keys differ.
+  password: password
+  example: |
+    - name: Make sure the new certificate goes with the installed key
+      newen_systems.smallca.match:
+        cert: /etc/nginx/tls/new.crt
+        key: /etc/nginx/tls/server.key
+  ret:
+  - match
+  - mismatch
+  - public_keys
+- name: mtls_verify
+  cmd:
+  - mtls
+  - verify
+  readonly: true
+  ok_codes:
+  - 0
+  - 3
+  short: Check a server and a client trust each other for mutual TLS
+  desc:
+  - Offline, checks both trust directions, usages, host name and key matches. With O(url), connects to
+    the live server as the client and reports whether it accepts the client certificate.
+  - Fails the task when a check fails, unless O(fail_on_invalid=false); RV(checks) lists each check with
+    its reason.
+  opts:
+    server_cert:
+      type: path
+      description: Server certificate, intermediates after it.
+      flag: --server-cert
+    server_key:
+      type: path
+      no_log: false
+      description: Server private key, to check it matches.
+      flag: --server-key
+    server_trust:
+      type: path
+      description: CA bundle the server trusts client certificates with.
+      flag: --server-trust
+    client_cert:
+      type: path
+      required: true
+      description: Client certificate, intermediates after it.
+      flag: --client-cert
+    client_key:
+      type: path
+      no_log: false
+      description: Client private key; required with O(url).
+      flag: --client-key
+    client_trust:
+      type: path
+      required: true
+      description: CA bundle the client trusts the server with.
+      flag: --client-trust
+    host:
+      type: str
+      description: Name the client connects to (offline check).
+      flag: --host
+    url:
+      type: str
+      description: 'Test a live server instead: host, host:port or https://host:port.'
+      flag: --url
+    servername:
+      type: str
+      description: SNI name to send with O(url).
+      flag: --servername
+    fail_on_invalid:
+      type: bool
+      default: true
+      description: Fail the task when a check fails.
+  example: |
+    - name: Will the agent and the API accept each other?
+      newen_systems.smallca.mtls_verify:
+        server_cert: /srv/pki/api-fullchain.pem
+        server_trust: /srv/pki/root.crt
+        client_cert: /srv/pki/agent-fullchain.pem
+        client_trust: /srv/pki/root.crt
+        host: api.example.test
+  ret:
+  - valid
+  - checks

@@ -1,0 +1,80 @@
+# Runs every module twice against a scratch directory and checks idempotency.
+# Run from the repository root: scripts/ansible-test.sh
+- name: smallca collection integration test
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    w: "{{ work_dir }}"
+    root_password: integration-root-password
+  tasks:
+    - name: Run everything twice
+      ansible.builtin.include_tasks: issue.yml
+      loop: [1, 2]
+      loop_control:
+        loop_var: pass
+
+    - name: Check mode reports a new leaf and writes nothing
+      newen_systems.smallca.leaf:
+        issuer_cert: "{{ w }}/issuing.crt"
+        issuer_key: "{{ w }}/issuing.key"
+        subject: dry.example.test
+        cert_out: "{{ w }}/dry.crt"
+        key_out: "{{ w }}/dry.key"
+      check_mode: true
+      register: dry
+
+    - name: Stat the dry-run output
+      ansible.builtin.stat:
+        path: "{{ w }}/dry.crt"
+      register: dry_file
+
+    - name: Assert check mode
+      ansible.builtin.assert:
+        that: [dry is changed, not dry_file.stat.exists]
+
+    - name: Read the leaf
+      newen_systems.smallca.certificate_info:
+        path: "{{ w }}/api-fullchain.pem"
+      register: info
+
+    - name: Verify it
+      newen_systems.smallca.verify:
+        path: "{{ w }}/api-fullchain.pem"
+        roots: "{{ w }}/root/root.crt"
+        host: api.example.test
+        min_remaining: 30d
+      register: verified
+
+    - name: A wrong host does not fail with fail_on_invalid false
+      newen_systems.smallca.verify:
+        path: "{{ w }}/api-fullchain.pem"
+        roots: "{{ w }}/root/root.crt"
+        host: wrong.example.test
+        fail_on_invalid: false
+      register: wrong
+
+    - name: Key and certificate match
+      newen_systems.smallca.match:
+        cert: "{{ w }}/api.crt"
+        key: "{{ w }}/api.key"
+      register: matched
+
+    - name: mTLS pair trusts each other
+      newen_systems.smallca.mtls_verify:
+        server_cert: "{{ w }}/api-fullchain.pem"
+        server_trust: "{{ w }}/root/root.crt"
+        client_cert: "{{ w }}/agent-fullchain.pem"
+        client_trust: "{{ w }}/root/root.crt"
+        host: api.example.test
+      register: mtls
+
+    - name: Assert the read-only modules
+      ansible.builtin.assert:
+        that:
+          - info.certificates | length == 2
+          - info.certificates[0].subject == 'CN=api.example.test'
+          - verified.valid and verified is not changed
+          - not wrong.valid
+          - matched.match
+          - mtls.valid and (mtls.checks | length) == 2

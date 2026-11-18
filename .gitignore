@@ -1,0 +1,13 @@
+# Local working notes and agent harnesses never ship.
+NOTES.md
+.agent/
+.agents/
+/dist/
+/smallca
+*.test
+*.out
+.coverage
+python-coverage.xml
+coverage.out
+__pycache__/
+*.pyc

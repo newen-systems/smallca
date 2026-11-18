@@ -1,0 +1,36 @@
+version: 2
+
+builds:
+  - main: ./cmd/smallca
+    binary: smallca
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X github.com/newen-systems/smallca/internal/smallca.Version={{.Version}}
+      - -X github.com/newen-systems/smallca/internal/smallca.Commit={{.ShortCommit}}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files: [LICENSE, NOTICE, README.md, CHANGELOG.md, SECURITY.md]
+
+checksum:
+  name_template: checksums.txt
+
+sboms:
+  - artifacts: archive
+
+changelog:
+  disable: true
+
+release:
+  github:
+    owner: newen-systems
+    name: smallca
+  draft: true

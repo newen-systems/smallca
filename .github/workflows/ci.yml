@@ -1,0 +1,100 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - run: go test -race ./...
+      - name: end-to-end regression test of the built binary
+        if: runner.os != 'Windows'
+        run: scripts/e2e.sh
+
+  ansible:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - name: install ansible-core
+        run: python3 -m pip install --user 'ansible-core==2.21.6' 'pyyaml==6.0.3' 'pytest==9.0.2'
+      - name: module_utils unit tests
+        run: python3 -m pytest -q ansible/tests/unit -p no:cacheprovider
+      - name: generated modules match their spec table
+        run: python3 scripts/gen-ansible-modules.py && git diff --exit-code ansible/
+      - name: ansible-test sanity
+        run: |
+          dest="$RUNNER_TEMP/ansible_collections/newen_systems/smallca"
+          mkdir -p "$(dirname "$dest")" && cp -R ansible "$dest"
+          cd "$dest" && git init -q . && git add -A
+          ansible-test sanity --python "$(python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
+      - name: integration test against the built binary
+        run: scripts/ansible-test.sh
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - name: statement coverage of internal packages, 85% minimum
+        run: |
+          go test -coverpkg=./internal/... -coverprofile=cover.out ./internal/...
+          total=$(go tool cover -func=cover.out | awk '/^total:/ {sub("%", "", $3); print $3}')
+          echo "coverage: ${total}%"
+          awk -v t="$total" 'BEGIN { exit (t < 85) }' || { echo "coverage below 85%"; exit 1; }
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - name: 20 seconds per fuzz target (seed corpora also run in the test job)
+        run: |
+          for pkg in ./internal/certfmt ./internal/csrutil ./internal/dn ./internal/smallca; do
+            for target in $(go test "$pkg" -list '^Fuzz' | grep '^Fuzz'); do
+              go test "$pkg" -run '^$' -fuzz "^${target}\$" -fuzztime 20s
+            done
+          done
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+      - run: go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0 -quiet ./...
+      - name: reference docs match --help
+        run: go test ./internal/smallca -run TestReferenceDocs
+
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
