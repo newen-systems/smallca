@@ -104,9 +104,7 @@ func TestInitIdempotentAndEncrypted(t *testing.T) {
 	if !bytes.Contains(keyPEM, []byte("ENCRYPTED PRIVATE KEY")) {
 		t.Fatal("root key is not encrypted PKCS#8")
 	}
-	if st, _ := os.Stat(filepath.Join(dir, "root.key")); st.Mode().Perm() != 0o600 {
-		t.Fatalf("root key mode %v", st.Mode().Perm())
-	}
+	wantPrivate(t, filepath.Join(dir, "root.key"))
 	before, _ := os.ReadFile(filepath.Join(dir, "root.crt"))
 	m := mustRun(t, testPass, "root", "create", "--root-dir", dir, "--subject", "CN=Test Root CA,O=Example", "--password-stdin")
 	after, _ := os.ReadFile(filepath.Join(dir, "root.crt"))
@@ -203,9 +201,7 @@ func TestIntermediateLeafAndSecret(t *testing.T) {
 	if m["changed"] != true {
 		t.Fatal("intermediate not created")
 	}
-	if st, _ := os.Stat(filepath.Join(out, "k8s.key")); st.Mode().Perm() != 0o600 {
-		t.Fatalf("intermediate key mode %v", st.Mode().Perm())
-	}
+	wantPrivate(t, filepath.Join(out, "k8s.key"))
 	secret, _ := os.ReadFile(filepath.Join(out, "k8s-secret.yaml"))
 	for _, want := range []string{"type: kubernetes.io/tls", "name: \"ca-key-pair\"", "namespace: \"cert-manager\"", "tls.crt: ", "tls.key: ", "ca.crt: "} {
 		if !bytes.Contains(secret, []byte(want)) {
@@ -591,9 +587,7 @@ func TestConvertToP12(t *testing.T) {
 	if m := mustRun(t, "", args...); m["changed"] != false {
 		t.Fatal("export re-run changed")
 	}
-	if st, _ := os.Stat(out); st.Mode().Perm() != 0o600 {
-		t.Fatalf("p12 mode %v", st.Mode().Perm())
-	}
+	wantPrivate(t, out)
 	if _, err := exec.LookPath("openssl"); err == nil {
 		openssl(t, "pkcs12", "-in", out, "-passin", "pass:pfx-pass", "-noout")
 	}
