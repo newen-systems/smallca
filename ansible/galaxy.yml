@@ -7,7 +7,7 @@ authors:
 description: Ansible modules for smallca, a non-interactive, idempotent certificate authority.
 license:
   - Apache-2.0
-tags: [pki, certificates, tls, mtls, ca, x509]
+tags: [security, pki, certificates, tls, mtls, ca, x509]
 repository: https://github.com/newen-systems/smallca
 documentation: https://github.com/newen-systems/smallca/tree/main/ansible
 issues: https://github.com/newen-systems/smallca/issues

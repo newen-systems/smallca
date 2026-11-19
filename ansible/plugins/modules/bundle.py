@@ -56,7 +56,7 @@ changed:
   returned: always
   type: bool
 fullchain:
-  description: The fullchain reported by smallca.
+  description: Path of the fullchain file, when requested.
   returned: success
   type: str
 chain:
