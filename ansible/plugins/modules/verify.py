@@ -76,7 +76,7 @@ error:
   returned: success
   type: str
 subject:
-  description: The subject reported by smallca.
+  description: Subject DN of the certificate.
   returned: success
   type: str
 days_left:

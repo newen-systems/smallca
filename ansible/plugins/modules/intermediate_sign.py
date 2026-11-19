@@ -91,7 +91,7 @@ changed:
   returned: always
   type: bool
 cert:
-  description: The cert reported by smallca.
+  description: Path of the certificate file.
   returned: success
   type: str
 chain:
@@ -99,27 +99,27 @@ chain:
   returned: success
   type: raw
 fullchain:
-  description: The fullchain reported by smallca.
+  description: Path of the fullchain file, when requested.
   returned: success
   type: str
 subject:
-  description: The subject reported by smallca.
+  description: Subject DN of the certificate.
   returned: success
   type: str
 serial:
-  description: The serial reported by smallca.
+  description: Certificate serial number, in decimal.
   returned: success
   type: str
 fingerprint_sha256:
-  description: The fingerprint sha256 reported by smallca.
+  description: SHA-256 fingerprint of the certificate, prefixed C(sha256:).
   returned: success
   type: str
 root_fingerprint_sha256:
-  description: The root fingerprint sha256 reported by smallca.
+  description: SHA-256 fingerprint of the root certificate.
   returned: success
   type: str
 not_after:
-  description: The not after reported by smallca.
+  description: Expiry time, RFC 3339 in UTC.
   returned: success
   type: str
 """
