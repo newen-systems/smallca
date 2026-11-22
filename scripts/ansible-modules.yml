@@ -47,6 +47,39 @@ return_descriptions:
   has_key:
     type: bool
     description: Whether the input held a private key.
+  cert:
+    type: str
+    description: Path of the certificate file.
+  key:
+    type: str
+    description: Path of the private key file.
+  fullchain:
+    type: str
+    description: Path of the fullchain file, when requested.
+  k8s_secret:
+    type: str
+    description: Path of the kubernetes.io/tls Secret manifest, when requested.
+  root_cert:
+    type: str
+    description: Path of the root certificate.
+  root_key:
+    type: str
+    description: Path of the encrypted root key.
+  root_fingerprint_sha256:
+    type: str
+    description: SHA-256 fingerprint of the root certificate.
+  subject:
+    type: str
+    description: Subject DN of the certificate.
+  serial:
+    type: str
+    description: Certificate serial number, in decimal.
+  fingerprint_sha256:
+    type: str
+    description: SHA-256 fingerprint of the certificate, prefixed C(sha256:).
+  not_after:
+    type: str
+    description: Expiry time, RFC 3339 in UTC.
 modules:
 - name: root
   cmd:

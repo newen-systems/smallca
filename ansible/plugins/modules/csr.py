@@ -81,7 +81,7 @@ changed:
   returned: always
   type: bool
 key:
-  description: The key reported by smallca.
+  description: Path of the private key file.
   returned: success
   type: str
 csr:
@@ -89,7 +89,7 @@ csr:
   returned: success
   type: dict
 subject:
-  description: The subject reported by smallca.
+  description: Subject DN of the certificate.
   returned: success
   type: str
 dns_names:

@@ -1,6 +1,6 @@
 # Runs every module twice against a scratch directory and checks idempotency.
 # Run from the repository root: scripts/ansible-test.sh
-- name: smallca collection integration test
+- name: Integration test of the smallca collection
   hosts: localhost
   connection: local
   gather_facts: false
@@ -60,7 +60,7 @@
         key: "{{ w }}/api.key"
       register: matched
 
-    - name: mTLS pair trusts each other
+    - name: Check the mTLS pair trusts each other
       newen_systems.smallca.mtls_verify:
         server_cert: "{{ w }}/api-fullchain.pem"
         server_trust: "{{ w }}/root/root.crt"
